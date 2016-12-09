@@ -194,14 +194,14 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size):
     state, action, reward, next_state, has_next = zip(*data)
     state = xp.asarray(state)
     action = xp.asarray(action)
-    reward = xp.asarray(reward)
+    reward = np.asarray(reward)
     next_state = xp.asarray(next_state)
-    has_next = xp.asarray(has_next)
+    has_next = np.asarray(has_next)
 
     q = F.select_item(agent(state), action)
-    next_action = cuda.to_cpu(xp.argmax(agent(next_state).data, axis=1))
+    next_action = cuda.to_cpu(np.argmax(agent(next_state).data, axis=1))
     y = reward + agent.gamma * has_next * cuda.to_cpu(target_agent(next_state).data)[(six.moves.range(len(next_action))), next_action]
-    loss = F.mean_squared_error(q, y)
+    loss = F.mean_squared_error(q, cuda.to_gpu(y))
     agent.cleargrads()
     loss.backward()
     optimizer.update()
@@ -259,7 +259,8 @@ def main():
         target_agent = agent.copy()
     else:
         target_agent = agent
-    optimizer = chainer.optimizers.Adam()
+    #optimizer = chainer.optimizers.Adam()
+    optimizer = chainer.optimizers.AdaDelta(rho=0.95, eps=1e-06)
     optimizer.setup(agent)
     shape = env.observation_space.shape
     if env_name == 'breakout':
@@ -274,15 +275,15 @@ def main():
             if need_render:
                 env.render()
             if env_name == 'breakout':
-                action = xp.argmax(cuda.to_cpu(agent(state).data))
+                action = np.argmax(cuda.to_cpu(agent(cuda.to_gpu(state)).data))
             else:
-                action = xp.argmax(cuda.to_cpu(agent(np.expand_dims(state, 0)).data))
+                action = np.argmax(cuda.to_cpu(agent(np.expand_dims(state, 0)).data))
             action = agent.randomize_action(action)
 
-            prev_state = state
+            prev_state = cuda.to_cpu(state)
             raw_state, raw_reward, done, info = env.step(action)
             reward = agent.adjust_reward(raw_state, raw_reward, done)
-            state = agent.normalize_state(raw_state)
+            state = cuda.to_cpu(agent.normalize_state(raw_state))
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
             for i in six.moves.range(train_num):
                 update(agent, target_agent, optimizer, ex_pool, batch_size)
