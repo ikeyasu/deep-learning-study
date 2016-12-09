@@ -1,13 +1,15 @@
 import argparse
 import gym
 import six
-import numpy as np
+import numpy
 import random
 
 import chainer
 from chainer import functions as F
 from chainer import links as L
+from chainer import serializers, cuda
 
+np = numpy
 
 class LinearAgent(chainer.Chain):
     gamma = 0.99
@@ -214,6 +216,8 @@ def parse_arg():
     parser.add_argument('--episode', type=int, default=1000, help='Number of episodes')
     parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
+    parser.add_argument('--gpu', '-g', default=-1, type=int,
+                        help='GPU ID (negative value indicates CPU)')
     return parser.parse_args()
 
 def main():
@@ -237,6 +241,15 @@ def main():
     else:
         env = gym.make('CartPole-v0')
         agent = CartPoleAgent()
+
+    if args.gpu >= 0:
+        cuda.check_cuda_available()
+        gpu_device = args.gpu
+        cuda.get_device(gpu_device).use()
+        global np
+        np = cuda.cupy
+        agent.to_gpu()
+
     skip_rendering_interval = args.skip_render
 
     if use_double_q:
