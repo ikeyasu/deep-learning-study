@@ -6,7 +6,7 @@ import random
 
 import chainer
 from chainer import functions as F
-from chainer import cuda
+from chainer import serializers, cuda
 from chainer import links as L
 
 gpu_device = 0
@@ -305,9 +305,10 @@ def main():
                 break
         if not done:
             print('Epsode {} completed'.format(episode + 1))
-            serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
-            serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
-            save_count += 1
+        print('Saving {} completed'.format(episode + 1))
+        serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
+        serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
+        save_count += 1
 
 if __name__ == '__main__':
     main()
