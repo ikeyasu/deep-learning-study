@@ -295,9 +295,10 @@ def main():
                 break
         if not done:
             print('Epsode {} completed'.format(episode + 1))
-            serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
-            serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
-            save_count += 1
+        print('Saving {} completed'.format(episode + 1))
+        serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
+        serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
+        save_count += 1
 
 if __name__ == '__main__':
     main()
