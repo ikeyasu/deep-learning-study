@@ -1,7 +1,7 @@
 import argparse
 import gym
 import six
-import numpy
+import numpy as np
 import random
 
 import chainer
@@ -9,7 +9,7 @@ from chainer import functions as F
 from chainer import links as L
 from chainer import serializers, cuda
 
-np = numpy
+xp = np
 
 class LinearAgent(chainer.Chain):
     gamma = 0.99
@@ -45,7 +45,7 @@ class LinearAgent(chainer.Chain):
         return reward
 
     def normalize_state(self, state):
-        return np.asarray(state, dtype=np.float32)
+        return xp.asarray(state, dtype=np.float32)
 
 
 class CNNAgent(chainer.Chain):
@@ -97,7 +97,7 @@ class CNNAgent(chainer.Chain):
         return reward
 
     def normalize_state(self, state):
-        return np.asarray(state, dtype=np.float32)
+        return xp.asarray(state, dtype=np.float32)
 
 class CartPoleAgent(LinearAgent):
     gamma = 0.9
@@ -112,8 +112,8 @@ class CartPoleAgent(LinearAgent):
         return reward
 
     def normalize_state(self, state):
-        scale = np.asarray([1 / 2.4, 1 / 4.0, 1 / 0.2, 1 / 3.0], dtype=np.float32)
-        return np.asarray(state, dtype=np.float32) * scale
+        scale = xp.asarray([1 / 2.4, 1 / 4.0, 1 / 0.2, 1 / 3.0], dtype=np.float32)
+        return xp.asarray(state, dtype=np.float32) * scale
 
 class MountainCarAgent(LinearAgent):
     gamma = 0.99
@@ -128,8 +128,8 @@ class MountainCarAgent(LinearAgent):
         return reward
 
     def normalize_state(self, state):
-        scale = np.asarray([1 / 1.2, 1 / 0.07], dtype=np.float32)
-        return np.asarray(state, dtype=np.float32) * scale
+        scale = xp.asarray([1 / 1.2, 1 / 0.07], dtype=np.float32)
+        return xp.asarray(state, dtype=np.float32) * scale
 
 
 class Breakout(CNNAgent):
@@ -146,7 +146,7 @@ class Breakout(CNNAgent):
         return reward
 
     def normalize_state(self, state):
-        array = np.asarray(state, dtype=np.float32).transpose((2, 0, 1))
+        array = xp.asarray(state, dtype=np.float32).transpose((2, 0, 1))
         reshaped = array.reshape((1,) + array.shape)
         return reshaped
         #return array#chainer.Variable(array.reshape((1,) + state.shape) / 127.5 - 1, volatile=True)
@@ -192,15 +192,15 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size):
     indices = np.random.permutation(available_size)[:1]
     data = [ex_pool[i] for i in indices]
     state, action, reward, next_state, has_next = zip(*data)
-    state = np.asarray(state)
-    action = np.asarray(action)
-    reward = np.asarray(reward)
-    next_state = np.asarray(next_state)
-    has_next = np.asarray(has_next)
+    state = xp.asarray(state)
+    action = xp.asarray(action)
+    reward = xp.asarray(reward)
+    next_state = xp.asarray(next_state)
+    has_next = xp.asarray(has_next)
 
     q = F.select_item(agent(state), action)
-    next_action = np.argmax(agent(next_state).data, axis=1)
-    y = reward + agent.gamma * has_next * target_agent(next_state).data[(six.moves.range(len(next_action))), next_action]
+    next_action = cuda.to_cpu(xp.argmax(agent(next_state).data, axis=1))
+    y = reward + agent.gamma * has_next * cuda.to_cpu(target_agent(next_state).data)[(six.moves.range(len(next_action))), next_action]
     loss = F.mean_squared_error(q, y)
     agent.cleargrads()
     loss.backward()
@@ -249,8 +249,8 @@ def main():
         cuda.check_cuda_available()
         gpu_device = args.gpu
         cuda.get_device(gpu_device).use()
-        global np
-        np = cuda.cupy
+        global xp
+        xp = cuda.cupy
         agent.to_gpu()
 
     skip_rendering_interval = args.skip_render
@@ -274,9 +274,9 @@ def main():
             if need_render:
                 env.render()
             if env_name == 'breakout':
-                action = np.argmax(agent(state).data)
+                action = xp.argmax(cuda.to_cpu(agent(state).data))
             else:
-                action = np.argmax(agent(np.expand_dims(state, 0)).data)
+                action = xp.argmax(cuda.to_cpu(agent(np.expand_dims(state, 0)).data))
             action = agent.randomize_action(action)
 
             prev_state = state
