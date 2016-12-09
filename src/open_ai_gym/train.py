@@ -236,6 +236,8 @@ def parse_arg():
     parser.add_argument('--episode', type=int, default=1000, help='Number of episodes')
     parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
+    parser.add_argument('--output', '-o', required=True, type=str,
+                        help='output model file path without extension')
     return parser.parse_args()
 
 def main():
@@ -248,6 +250,7 @@ def main():
     update_count = 0
     update_agent_interval = 100
     use_double_q = args.use_double_q
+    save_count = 0
 
     env_name = args.env
     if env_name == 'mountain_car':
@@ -302,6 +305,9 @@ def main():
                 break
         if not done:
             print('Epsode {} completed'.format(episode + 1))
+            serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
+            serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
+            save_count += 1
 
 if __name__ == '__main__':
     main()
