@@ -6,7 +6,12 @@ import random
 
 import chainer
 from chainer import functions as F
+from chainer import cuda
 from chainer import links as L
+
+gpu_device = 0
+cuda.get_device(gpu_device).use()
+xp = cuda.cupy
 
 class Agent(chainer.Chain):
     gamma = 0.99
@@ -42,7 +47,7 @@ class Agent(chainer.Chain):
         return reward
 
     def normalize_state(self, state):
-        return np.asarray(state, dtype=np.float32)
+        return xp.asarray(state, dtype=xp.float32)
 
 class CartPoleAgent(Agent):
     gamma = 0.9
@@ -57,8 +62,8 @@ class CartPoleAgent(Agent):
         return reward
 
     def normalize_state(self, state):
-        scale = np.asarray([1 / 2.4, 1 / 4.0, 1 / 0.2, 1 / 3.0], dtype=np.float32)
-        return np.asarray(state, dtype=np.float32) * scale
+        scale = xp.asarray([1 / 2.4, 1 / 4.0, 1 / 0.2, 1 / 3.0], dtype=xp.float32)
+        return xp.asarray(state, dtype=xp.float32) * scale
 
 class MountainCarAgent(Agent):
     gamma = 0.99
@@ -73,17 +78,17 @@ class MountainCarAgent(Agent):
         return reward
 
     def normalize_state(self, state):
-        scale = np.asarray([1 / 1.2, 1 / 0.07], dtype=np.float32)
-        return np.asarray(state, dtype=np.float32) * scale
+        scale = xp.asarray([1 / 1.2, 1 / 0.07], dtype=xp.float32)
+        return xp.asarray(state, dtype=xp.float32) * scale
 
 class ExperiencePool(object):
 
     def __init__(self, size, state_shape):
         self.size = size
-        self.states = np.zeros(((size,) + state_shape), dtype=np.float32)
-        self.actions = np.zeros((size,), dtype=np.int32)
-        self.rewards = np.zeros((size,), dtype=np.float32)
-        self.nexts = np.zeros((size,), dtype=np.float32)
+        self.states = xp.zeros(((size,) + state_shape), dtype=xp.float32)
+        self.actions = xp.zeros((size,), dtype=xp.int32)
+        self.rewards = xp.zeros((size,), dtype=xp.float32)
+        self.nexts = xp.zeros((size,), dtype=xp.float32)
         self.pos = 0
 
     def add(self, state, action, reward, done):
@@ -117,15 +122,23 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size):
     indices = np.random.permutation(available_size)[:batch_size]
     data = [ex_pool[i] for i in indices]
     state, action, reward, next_state, has_next = zip(*data)
-    state = np.asarray(state)
-    action = np.asarray(action)
-    reward = np.asarray(reward)
-    next_state = np.asarray(next_state)
-    has_next = np.asarray(has_next)
+    state = xp.asarray(state, dtype=xp.float32)
+    action = xp.asarray(action, dtype=xp.int32)
+    reward = xp.asarray(reward, dtype=xp.float32)
+    next_state = xp.asarray(next_state, dtype=xp.float32)
+    has_next = xp.asarray(has_next, dtype=xp.float32)
 
     q = F.select_item(agent(state), action)
-    next_action = np.argmax(agent(next_state).data, axis=1)
-    y = reward + agent.gamma * has_next * target_agent(next_state).data[(six.moves.range(len(next_action))), next_action]
+
+    next_action = xp.argmax(agent(next_state).data, axis=1)
+    target_data = target_agent(next_state).data
+    target_data = cuda.elementwise(
+        'raw T x, S t',
+        'T y',
+        'int ind[] = {i, t}; y = x[ind];',
+        'action_select_fwd',
+    )(target_data, next_action)
+    y = reward + agent.gamma * has_next * target_data
     loss = F.mean_squared_error(q, y)
     agent.cleargrads()
     loss.backward()
@@ -161,6 +174,7 @@ def main():
     else:
         env = gym.make('CartPole-v0')
         agent = CartPoleAgent()
+    agent.to_gpu(gpu_device)
     skip_rendering_interval = args.skip_render
 
     if use_double_q:
@@ -178,11 +192,11 @@ def main():
         for t in six.moves.range(episode_length):
             if need_render:
                 env.render()
-            action = np.argmax(agent(np.expand_dims(state, 0)).data)
+            action = xp.argmax(agent(xp.expand_dims(state, 0)).data)
             action = agent.randomize_action(action)
 
             prev_state = state
-            raw_state, raw_reward, done, info = env.step(action)
+            raw_state, raw_reward, done, info = env.step(int(action))
             reward = agent.adjust_reward(raw_state, raw_reward, done)
             state = agent.normalize_state(raw_state)
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
