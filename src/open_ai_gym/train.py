@@ -115,18 +115,22 @@ class ExperiencePool(object):
         index += offset
         return self.states[index], self.actions[index], self.rewards[index], self.states[index + 1], self.nexts[index]
 
+    def take(self, indices):
+        if self.pos < self.size:
+            offset = 0
+        else:
+            offset = self.pos % self.size - self.size
+        indices += offset
+        return (xp.take(self.states, indices, axis=0), xp.take(self.actions, indices, axis=0),
+                xp.take(self.rewards, indices, axis=0), xp.take(self.states, indices + 1, axis=0),
+                xp.take(self.nexts, indices, axis=0))
+
 def update(agent, target_agent, optimizer, ex_pool, batch_size):
     available_size = ex_pool.available_size()
     if available_size < batch_size:
         return
     indices = np.random.permutation(available_size)[:batch_size]
-    data = [ex_pool[i] for i in indices]
-    state, action, reward, next_state, has_next = zip(*data)
-    state = xp.asarray(state, dtype=xp.float32)
-    action = xp.asarray(action, dtype=xp.int32)
-    reward = xp.asarray(reward, dtype=xp.float32)
-    next_state = xp.asarray(next_state, dtype=xp.float32)
-    has_next = xp.asarray(has_next, dtype=xp.float32)
+    state, action, reward, next_state, has_next = ex_pool.take(indices)
 
     q = F.select_item(agent(state), action)
 
