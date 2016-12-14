@@ -139,19 +139,25 @@ class Breakout(CNNAgent):
     initial_epsilon = 0.8
     min_epsilon = 0.1
     epsilon_reduction = 0.0001
+    resized_w = 210 / 2
+    resized_h = 160 / 2
 
     def __init__(self):
-        #h ttps://gym.openai.com/envs/Breakout-v0
-        super(Breakout, self).__init__(210, 160, 3, 6, 256)
+        # https://gym.openai.com/envs/Breakout-v0
+        super(Breakout, self).__init__(self.resized_w, self.resized_h, 3, 6, 256)
 
     def adjust_reward(self, state, reward, done):
         return reward
 
     def normalize_state(self, state):
         array = np.asarray(state, dtype=np.float32).transpose((2, 0, 1))
-        reshaped = array.reshape((1,) + array.shape)
+        resized = array.copy()
+        resized.resize((3, self.resized_w, self.resized_h))
+        reshaped = resized.reshape((1,) + resized.shape)
         return reshaped
-        #return array#chainer.Variable(array.reshape((1,) + state.shape) / 127.5 - 1, volatile=True)
+
+    def get_space_shape(self):
+        return (3, self.resized_w, self.resized_h)
 
 class ExperiencePool(object):
 
@@ -264,12 +270,12 @@ def main():
     optimizer.setup(agent)
     shape = env.observation_space.shape
     if env_name == 'breakout':
-        shape = (shape[2], shape[0], shape[1])
+        shape = agent.get_space_shape()
     ex_pool = ExperiencePool(pool_size, shape)
 
     for episode in six.moves.range(episode_num):
         raw_state = env.reset()
-        state = agent.normalize_state(raw_state)
+        state = xp.asarray(agent.normalize_state(raw_state))
         need_render = skip_rendering_interval <= 0 or episode % skip_rendering_interval == 0
         for t in six.moves.range(episode_length):
             if need_render:
@@ -283,7 +289,7 @@ def main():
             prev_state = state
             raw_state, raw_reward, done, info = env.step(int(action))
             reward = agent.adjust_reward(raw_state, raw_reward, done)
-            state = agent.normalize_state(raw_state)
+            state = xp.asarray(agent.normalize_state(raw_state))
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
             for i in six.moves.range(train_num):
                 update(agent, target_agent, optimizer, ex_pool, batch_size)
