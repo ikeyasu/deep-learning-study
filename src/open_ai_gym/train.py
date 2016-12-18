@@ -230,7 +230,7 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu):
 def parse_arg():
     parser = argparse.ArgumentParser('Open AI Gym learning sample')
     parser.add_argument('--gpu', '-g', default=-1, type=int, help='GPU ID (negative value indicates CPU)')
-    parser.add_argument('--env', '-e', type=str, choices=['cart_pole', 'mountain_car'], help='Environment name')
+    parser.add_argument('--env', '-e', type=str, choices=['cart_pole', 'mountain_car', 'breakout'], help='Environment name')
     parser.add_argument('--skip_render', '-s', type=int, default=0, help='Episodes nterval to skip rendering')
     parser.add_argument('--batch-size', '-b', type=int, default=32, help='Batch size for taining')
     parser.add_argument('--pool-size', '-p', type=int, default=2000, help='Experiance pool size')
@@ -238,6 +238,7 @@ def parse_arg():
     parser.add_argument('--episode', type=int, default=1000, help='Number of episodes')
     parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
+    parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
     parser.add_argument('--output', '-o', required=True, type=str,
                         help='output model file path without extension')
     return parser.parse_args()
@@ -278,6 +279,10 @@ def main():
         target_agent = agent
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(agent)
+    if args.input is not None:
+        serializers.load_hdf5('{}.model'.format(args.input), agent)
+        serializers.load_hdf5('{}.state'.format(args.input), optimizer)
+
     shape = env.observation_space.shape
     if env_name == 'breakout':
         shape = agent.get_space_shape()
