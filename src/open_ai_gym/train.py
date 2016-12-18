@@ -236,11 +236,12 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv)
     loss.backward()
     optimizer.update()
     if log_vv:
-        print('train: reward={}'.format(reward))
+        print('train: reward={}'.format(float(reward)))
 
 def update_main(train_num, agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv):
-    for i in six.moves.range(train_num):
-        update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv)
+    while True:
+        for i in six.moves.range(train_num):
+            update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv)
 
 def parse_arg():
     parser = argparse.ArgumentParser('Open AI Gym learning sample')
@@ -250,8 +251,8 @@ def parse_arg():
     parser.add_argument('--batch-size', '-b', type=int, default=32, help='Batch size for taining')
     parser.add_argument('--pool-size', '-p', type=int, default=2000, help='Experiance pool size')
     parser.add_argument('--train-iter', '-t', type=int, default=10, help='Number of training iterations')
-    parser.add_argument('--episode', type=int, default=1000, help='Number of episodes')
-    parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
+    parser.add_argument('--episode', type=int, default=10000, help='Number of episodes')
+    parser.add_argument('--episode-len', type=int, default=10000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
     parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
     parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
@@ -259,6 +260,7 @@ def parse_arg():
     parser.add_argument('--vvv', action='store_true', help = 'log verbose2')
     parser.add_argument('--no-render', action='store_true', help = 'no rendering')
     parser.add_argument('--resize', '-r', default=1, type=int, help='resize screen image to 1/N (breakout only)')
+    parser.add_argument('--save-interval', default=100, type=int, help='episode interval to save model')
     return parser.parse_args()
 
 def main():
@@ -272,6 +274,7 @@ def main():
     update_agent_interval = 100
     use_double_q = args.use_double_q
     save_count = 0
+    save_interval = 0
 
     env_name = args.env
     if env_name == 'mountain_car':
@@ -338,10 +341,13 @@ def main():
                 break
         if not done:
             print('Epsode {} completed'.format(episode + 1))
-        if args.output is not None:
+        if args.output is not None and save_interval >= args.save_interval:
             print('Saving {} completed'.format(episode + 1))
             serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
             serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
+            save_interval = 0
+        else:
+            save_interval += 1
         save_count += 1
 
 if __name__ == '__main__':
