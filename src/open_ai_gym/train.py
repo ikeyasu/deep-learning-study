@@ -97,7 +97,7 @@ class CNNAgent(chainer.Chain):
         return reward
 
     def normalize_state(self, state):
-        return np.asarray(state, dtype=np.float32)
+        return xp.asarray(state, dtype=xp.float32)
 
 class CartPoleAgent(LinearAgent):
     gamma = 0.9
@@ -148,7 +148,7 @@ class Breakout(CNNAgent):
         return reward
 
     def normalize_state(self, state):
-        array = np.asarray(state, dtype=np.float32).transpose((2, 0, 1))
+        array = xp.asarray(state, dtype=xp.float32).transpose((2, 0, 1))
         resized = array.copy()
         resized.resize((3, self.resized_w, self.resized_h))
         reshaped = resized.reshape((1,) + resized.shape)
@@ -239,8 +239,8 @@ def parse_arg():
     parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
     parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
-    parser.add_argument('--output', '-o', required=True, type=str,
-                        help='output model file path without extension')
+    parser.add_argument('--vv', action='store_true', help = 'log verbose')
+    parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
     return parser.parse_args()
 
 def main():
@@ -304,6 +304,8 @@ def main():
             prev_state = state
             raw_state, raw_reward, done, info = env.step(int(action))
             reward = agent.adjust_reward(raw_state, raw_reward, done)
+            if args.vv:
+                print('reward={}, done={}'.format(reward, done))
             state = xp.asarray(agent.normalize_state(raw_state))
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
             for i in six.moves.range(train_num):
@@ -317,9 +319,10 @@ def main():
                 break
         if not done:
             print('Epsode {} completed'.format(episode + 1))
-        print('Saving {} completed'.format(episode + 1))
-        serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
-        serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
+        if args.output is not None:
+            print('Saving {} completed'.format(episode + 1))
+            serializers.save_hdf5('{0}_{1:03d}.model'.format(args.output, save_count), agent)
+            serializers.save_hdf5('{0}_{1:03d}.state'.format(args.output, save_count), optimizer)
         save_count += 1
 
 if __name__ == '__main__':
