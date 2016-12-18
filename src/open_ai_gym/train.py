@@ -240,6 +240,7 @@ def parse_arg():
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
     parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
     parser.add_argument('--vv', action='store_true', help = 'log verbose')
+    parser.add_argument('--no-render', action='store_true', help = 'no rendering')
     parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
     return parser.parse_args()
 
@@ -291,7 +292,7 @@ def main():
     for episode in six.moves.range(episode_num):
         raw_state = env.reset()
         state = xp.asarray(agent.normalize_state(raw_state))
-        need_render = skip_rendering_interval <= 0 or episode % skip_rendering_interval == 0
+        need_render = (skip_rendering_interval <= 0 or episode % skip_rendering_interval == 0) and (not args.no_render)
         for t in six.moves.range(episode_length):
             if need_render:
                 env.render()
