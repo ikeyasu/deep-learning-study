@@ -1,4 +1,6 @@
 import argparse
+import thread
+
 import gym
 import six
 import numpy as np
@@ -208,7 +210,7 @@ class ExperiencePool(object):
                 xp.take(self.rewards, indices, axis=0), xp.take(self.states, indices + 1, axis=0),
                 xp.take(self.nexts, indices, axis=0))
 
-def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu):
+def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv):
     available_size = ex_pool.available_size()
     if available_size < batch_size:
         return
@@ -233,6 +235,12 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu):
     agent.cleargrads()
     loss.backward()
     optimizer.update()
+    if log_vv:
+        print('train: reward={}'.format(reward))
+
+def update_main(train_num, agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv):
+    for i in six.moves.range(train_num):
+        update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu, log_vv)
 
 def parse_arg():
     parser = argparse.ArgumentParser('Open AI Gym learning sample')
@@ -248,6 +256,7 @@ def parse_arg():
     parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
     parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
     parser.add_argument('--vv', action='store_true', help = 'log verbose')
+    parser.add_argument('--vvv', action='store_true', help = 'log verbose2')
     parser.add_argument('--no-render', action='store_true', help = 'no rendering')
     parser.add_argument('--resize', '-r', default=1, type=int, help='resize screen image to 1/N (breakout only)')
     return parser.parse_args()
@@ -297,6 +306,9 @@ def main():
         shape = agent.get_space_shape()
     ex_pool = ExperiencePool(pool_size, shape)
 
+    thread.start_new_thread(update_main,
+           (train_num, agent, target_agent, optimizer, ex_pool, batch_size, True if args.gpu >= 0 else False, args.vv))
+
     for episode in six.moves.range(episode_num):
         raw_state = env.reset()
         state = xp.asarray(agent.normalize_state(raw_state))
@@ -313,12 +325,10 @@ def main():
             prev_state = state
             raw_state, raw_reward, done, info = env.step(int(action))
             reward = agent.adjust_reward(raw_state, raw_reward, done)
-            if args.vv:
-                print('reward={}, done={}'.format(reward, done))
+            if args.vvv:
+                print('step: reward={}, done={}'.format(reward, done))
             state = xp.asarray(agent.normalize_state(raw_state))
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
-            for i in six.moves.range(train_num):
-                update(agent, target_agent, optimizer, ex_pool, batch_size, True if args.gpu >= 0 else False)
             update_count += 1
             agent.reduce_epsilon()
             if use_double_q and update_count % update_agent_interval == 0:
