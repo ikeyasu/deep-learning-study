@@ -137,11 +137,15 @@ class Breakout(CNNAgent):
     initial_epsilon = 0.8
     min_epsilon = 0.1
     epsilon_reduction = 0.0001
-    resized_w = 210 / 2
-    resized_h = 160 / 2
+    resized_w = 210
+    resized_h = 160
+    resize_scale = 1
 
-    def __init__(self):
+    def __init__(self, resize):
         # https://gym.openai.com/envs/Breakout-v0
+	self.resized_w /= resize
+	self.resized_h /= resize
+	self.resize_scale = resize
         super(Breakout, self).__init__(self.resized_w, self.resized_h, 3, 6, 256)
 
     def adjust_reward(self, state, reward, done):
@@ -149,8 +153,11 @@ class Breakout(CNNAgent):
 
     def normalize_state(self, state):
         array = xp.asarray(state, dtype=xp.float32).transpose((2, 0, 1))
-        resized = array.copy()
-        resized.resize((3, self.resized_w, self.resized_h))
+        if self.resize_scale != 1:
+	    resized = array.copy()
+            resized.resize((3, self.resized_w, self.resized_h))
+        else:
+            resized = array
         reshaped = resized.reshape((1,) + resized.shape)
         return reshaped
 
@@ -239,9 +246,10 @@ def parse_arg():
     parser.add_argument('--episode-len', type=int, default=1000, help='Length of an episode')
     parser.add_argument('--use-double-q', action='store_true', help='Use Double Q-learning')
     parser.add_argument('--input', '-i', default=None, type=str, help = 'input model file path without extension')
+    parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
     parser.add_argument('--vv', action='store_true', help = 'log verbose')
     parser.add_argument('--no-render', action='store_true', help = 'no rendering')
-    parser.add_argument('--output', '-o', default=None, type=str, help='output model file path without extension')
+    parser.add_argument('--resize', '-r', default=1, type=int, help='resize screen image to 1/N (breakout only)')
     return parser.parse_args()
 
 def main():
@@ -262,7 +270,7 @@ def main():
         agent = MountainCarAgent()
     elif env_name == 'breakout':
         env = gym.make('Breakout-v0')
-        agent = Breakout()
+        agent = Breakout(args.resize)
     else:
         env = gym.make('CartPole-v0')
         agent = CartPoleAgent()
