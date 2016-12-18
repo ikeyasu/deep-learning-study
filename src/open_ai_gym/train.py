@@ -9,9 +9,7 @@ from chainer import functions as F
 from chainer import serializers, cuda
 from chainer import links as L
 
-gpu_device = 0
-cuda.get_device(gpu_device).use()
-xp = cuda.cupy
+xp = np
 
 class LinearAgent(chainer.Chain):
     gamma = 0.99
@@ -203,7 +201,7 @@ class ExperiencePool(object):
                 xp.take(self.rewards, indices, axis=0), xp.take(self.states, indices + 1, axis=0),
                 xp.take(self.nexts, indices, axis=0))
 
-def update(agent, target_agent, optimizer, ex_pool, batch_size):
+def update(agent, target_agent, optimizer, ex_pool, batch_size, use_gpu):
     available_size = ex_pool.available_size()
     if available_size < batch_size:
         return
@@ -214,12 +212,15 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size):
 
     next_action = xp.argmax(agent(next_state).data, axis=1)
     target_data = target_agent(next_state).data
-    target_data = cuda.elementwise(
-        'raw T x, S t',
-        'T y',
-        'int ind[] = {i, t}; y = x[ind];',
-        'action_select_fwd',
-    )(target_data, next_action)
+    if use_gpu:
+        target_data = cuda.elementwise(
+            'raw T x, S t',
+            'T y',
+            'int ind[] = {i, t}; y = x[ind];',
+            'action_select_fwd',
+        )(target_data, next_action)
+    else:
+        target_data = target_data[(six.moves.range(len(next_action))), next_action]
     y = reward + agent.gamma * has_next * target_data
     loss = F.mean_squared_error(q, y)
     agent.cleargrads()
@@ -228,7 +229,8 @@ def update(agent, target_agent, optimizer, ex_pool, batch_size):
 
 def parse_arg():
     parser = argparse.ArgumentParser('Open AI Gym learning sample')
-    parser.add_argument('--env', '-e', type=str, choices=['cart_pole', 'mountain_car', 'breakout'], help='Environment name')
+    parser.add_argument('--gpu', '-g', default=-1, type=int, help='GPU ID (negative value indicates CPU)')
+    parser.add_argument('--env', '-e', type=str, choices=['cart_pole', 'mountain_car'], help='Environment name')
     parser.add_argument('--skip_render', '-s', type=int, default=0, help='Episodes nterval to skip rendering')
     parser.add_argument('--batch-size', '-b', type=int, default=32, help='Batch size for taining')
     parser.add_argument('--pool-size', '-p', type=int, default=2000, help='Experiance pool size')
@@ -262,7 +264,12 @@ def main():
     else:
         env = gym.make('CartPole-v0')
         agent = CartPoleAgent()
-    agent.to_gpu(gpu_device)
+    if args.gpu >= 0:
+        gpu_device = args.gpu
+        cuda.get_device(gpu_device).use()
+        agent.to_gpu(gpu_device)
+        global xp
+        xp = cuda.cupy
     skip_rendering_interval = args.skip_render
 
     if use_double_q:
@@ -295,7 +302,7 @@ def main():
             state = xp.asarray(agent.normalize_state(raw_state))
             ex_pool.add(prev_state, action, reward, done or t == episode_length - 1)
             for i in six.moves.range(train_num):
-                update(agent, target_agent, optimizer, ex_pool, batch_size)
+                update(agent, target_agent, optimizer, ex_pool, batch_size, True if args.gpu >= 0 else False)
             update_count += 1
             agent.reduce_epsilon()
             if use_double_q and update_count % update_agent_interval == 0:
